@@ -6,3 +6,4 @@ pydantic~=1.10.9
 uvicorn
 fastapi~=0.97.0
 tortoise~=0.1.1
+starlette~=0.27.0

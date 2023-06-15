@@ -1,11 +1,28 @@
 from uuid import UUID
 from fastapi import FastAPI
-from tortoise import Tortoise
+from starlette.middleware.cors import CORSMiddleware
+from tortoise import Tortoise, functions
 from tortoise.contrib.fastapi import register_tortoise
 from src.models.transaction import Transaction
 from src.models.transaction_create import TransactionCreate
 
 app = FastAPI()
+
+# CORS Configuration
+origins = [
+    "http://127.0.0.1:5173",
+    "http://localhost:*",
+    "http://localhost:5173",
+    # Add other allowed origins as needed
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["*"],
+)
 
 TORTOISE_ORM = {
     "connections": {
@@ -31,11 +48,13 @@ register_tortoise(
 )
 
 
-@app.get("/transactions/{user_id}/{year}/{month}")
+@app.get("/transactions/{user_id}")
 async def get_transactions(user_id: str, year: int, month: int):
-    return await Transaction.filter(user_id=user_id,
-                                    start_date__year=year,
-                                    start_date__month=month)
+    year_month = f"{year}-{month:02}"
+    return await Transaction.filter(
+        user_id=user_id,
+        start_date__startswith=year_month,
+    )
 
 
 @app.post("/transaction")
