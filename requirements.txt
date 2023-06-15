@@ -1,0 +1,8 @@
+pip~=23.0
+Pillow~=9.4.0
+setuptools~=65.5.0
+tortoise-orm
+pydantic~=1.10.9
+uvicorn
+fastapi~=0.97.0
+tortoise~=0.1.1

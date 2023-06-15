@@ -40,8 +40,16 @@ Activate the virtual environment:
 
 - On Windows, run:
 
+If you don't have venv yet:
   ```cmd
-  .\env\Scripts\activate
+  python -m venv myenv 
+  ```
+  ```cmd
+  myenv\Scripts\activate
+  ```
+To deactivate the virtual environment, simply run the following command in the command prompt:
+  ```cmd
+deactivate
   ```
 
 Next, install the project dependencies:

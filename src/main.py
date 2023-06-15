@@ -1,16 +1,33 @@
 from fastapi import FastAPI
+from tortoise import Tortoise
 from tortoise.contrib.fastapi import register_tortoise
+
 from src.models.transaction import Transaction
-from src.models.transaction import TransactionCreate
+from src.models.transaction_create import TransactionCreate
 
 app = FastAPI()
 
+TORTOISE_ORM = {
+    "connections": {
+        "default": "sqlite://db.sqlite3",
+    },
+    "apps": {
+        "models": {
+            "models": ["src.models.transaction"],
+            "default_connection": "default",
+        },
+    },
+}
+
+
+@app.on_event("startup")
+async def startup():
+    await Tortoise.init(config=TORTOISE_ORM)
+    await Tortoise.generate_schemas()
+
 register_tortoise(
     app,
-    db_url='sqlite://db.sqlite3',
-    modules={'models': ['src.models']},
-    generate_schemas=True,
-    add_exception_handlers=True,
+    config=TORTOISE_ORM,
 )
 
 
