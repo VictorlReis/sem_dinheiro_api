@@ -1,9 +1,11 @@
+import csv
 from uuid import UUID
-from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
-from tortoise import Tortoise, functions
+from tortoise import Tortoise
 from tortoise.contrib.fastapi import register_tortoise
-from src.models.transaction import Transaction
+from fastapi import FastAPI, UploadFile, File
+from datetime import datetime
+from src.models.transaction import Transaction, TransactionType
 from src.models.transaction_create import TransactionCreate
 
 app = FastAPI()
@@ -77,3 +79,42 @@ async def delete_transaction(transaction_id: UUID):
     transaction = await Transaction.get(id=transaction_id)
     await transaction.delete()
     return {"message": "Transaction deleted"}
+
+
+@app.post("/transactions/csv")
+async def create_transactions_from_csv(file: UploadFile = File(...)):
+    transactions = []
+
+    # Read the uploaded CSV file
+    contents = await file.read()
+
+    # Decode the contents as a string
+    decoded_content = contents.decode("utf-8")
+
+    # Create a CSV reader
+    reader = csv.reader(decoded_content.splitlines(), delimiter=";")
+
+    # Skip the header row
+    next(reader)
+
+    for row in reader:
+        date_str, establishment, _, value_str, _ = row
+        value = float(value_str.replace("R$", "").replace(",", "."))
+
+        date = datetime.strptime(date_str, "%d/%m/%Y")
+        formatted_date = date.date().isoformat()
+
+        transaction = TransactionCreate(
+            description=establishment,
+            type=TransactionType.Expense,
+            start_date=formatted_date,
+            payment_method="",
+            tag="",
+            value=value,
+            user_id="string",
+        )
+
+        created_transaction = await Transaction.create(**transaction.dict())
+        transactions.append(created_transaction)
+
+    return {"message": "Transactions created", "transactions": transactions}
