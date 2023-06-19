@@ -1,5 +1,7 @@
 import csv
 from uuid import UUID
+
+import uvicorn
 from starlette.middleware.cors import CORSMiddleware
 from tortoise import Tortoise
 from tortoise.contrib.fastapi import register_tortoise
@@ -10,12 +12,10 @@ from src.models.transaction_create import TransactionCreate
 
 app = FastAPI()
 
-# CORS Configuration
 origins = [
     "http://127.0.0.1:5173",
     "http://localhost:*",
     "http://localhost:5173",
-    # Add other allowed origins as needed
 ]
 
 app.add_middleware(
@@ -83,38 +83,41 @@ async def delete_transaction(transaction_id: UUID):
 
 @app.post("/transactions/csv")
 async def create_transactions_from_csv(file: UploadFile = File(...)):
-    transactions = []
+    try:
+        transactions = []
 
-    # Read the uploaded CSV file
-    contents = await file.read()
+        contents = await file.read()
+        decoded_content = contents.decode("utf-8")
+        reader = csv.reader(decoded_content.splitlines(), delimiter=";")
+        next(reader)
 
-    # Decode the contents as a string
-    decoded_content = contents.decode("utf-8")
+        for row in reader:
+            try:
+                date_str, establishment, _, value_str, _ = row
+                value = float(value_str.replace("R$", "").replace(",", "."))
 
-    # Create a CSV reader
-    reader = csv.reader(decoded_content.splitlines(), delimiter=";")
+                date = datetime.strptime(date_str, "%d/%m/%Y")
+                formatted_date = date.date().isoformat()
 
-    # Skip the header row
-    next(reader)
+                transaction = TransactionCreate(
+                    description=establishment,
+                    type=TransactionType.Expense,
+                    start_date=formatted_date,
+                    payment_method="",
+                    tag="",
+                    value=value,
+                    user_id="string",
+                )
 
-    for row in reader:
-        date_str, establishment, _, value_str, _ = row
-        value = float(value_str.replace("R$", "").replace(",", "."))
+                created_transaction = await Transaction.create(**transaction.dict())
+                transactions.append(created_transaction)
+            except Exception as e:
+                print(f"Error processing row: {row}. Error: {str(e)}")
 
-        date = datetime.strptime(date_str, "%d/%m/%Y")
-        formatted_date = date.date().isoformat()
+        return {"message": "Transactions created", "transactions": transactions}
+    except Exception as e:
+        print(f"Error creating transactions: {str(e)}")
+        return {"message": "Error creating transactions"}
 
-        transaction = TransactionCreate(
-            description=establishment,
-            type=TransactionType.Expense,
-            start_date=formatted_date,
-            payment_method="",
-            tag="",
-            value=value,
-            user_id="string",
-        )
-
-        created_transaction = await Transaction.create(**transaction.dict())
-        transactions.append(created_transaction)
-
-    return {"message": "Transactions created", "transactions": transactions}
+if __name__ == '__main__':
+    uvicorn.run(app, host="0.0.0.0", port=8000)

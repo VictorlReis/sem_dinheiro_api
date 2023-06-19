@@ -1,6 +1,5 @@
 import uuid
 from enum import IntEnum
-
 from tortoise import fields
 from tortoise.models import Model
 
@@ -25,4 +24,3 @@ class Transaction(Model):
 
     def set_type(self, value: TransactionType):
         self.type = value.value
-
