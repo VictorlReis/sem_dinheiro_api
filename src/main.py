@@ -1,6 +1,5 @@
 import csv
 from uuid import UUID
-
 import uvicorn
 from starlette.middleware.cors import CORSMiddleware
 from tortoise import Tortoise
@@ -103,7 +102,7 @@ async def create_transactions_from_csv(file: UploadFile = File(...)):
                     description=establishment,
                     type=TransactionType.Expense,
                     start_date=formatted_date,
-                    payment_method="",
+                    payment_method="fatura xp",
                     tag="",
                     value=value,
                     user_id="string",
