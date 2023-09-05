@@ -1,13 +1,10 @@
-import csv
-from uuid import UUID
+import datetime
+import os
+import json
+from pynubank import Nubank, MockHttpClient
 import uvicorn
+from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
-from tortoise import Tortoise
-from tortoise.contrib.fastapi import register_tortoise
-from fastapi import FastAPI, UploadFile, File
-from datetime import datetime
-from src.models.transaction import Transaction, TransactionType
-from src.models.transaction_create import TransactionCreate
 
 app = FastAPI()
 
@@ -25,98 +22,63 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-TORTOISE_ORM = {
-    "connections": {
-        "default": "sqlite://db.sqlite3",
-    },
-    "apps": {
-        "models": {
-            "models": ["src.models.transaction"],
-            "default_connection": "default",
-        },
-    },
-}
+
+def date_in_month_and_year(data_str, month, year):
+    data = datetime.datetime.fromisoformat(data_str)
+    return data.month == month and data.year == year
 
 
-@app.on_event("startup")
-async def startup():
-    await Tortoise.init(config=TORTOISE_ORM)
-    await Tortoise.generate_schemas()
+@app.get("/nubank/get_transactions_mock")
+async def get_nubank_transactions_mock(year: int, month: int):
+    dados_json = """
+    """
 
-register_tortoise(
-    app,
-    config=TORTOISE_ORM,
-)
+    dados_python = json.loads(dados_json)
 
+    dados_transformados = []
 
-@app.get("/transactions/{user_id}")
-async def get_transactions(user_id: str, year: int, month: int):
-    year_month = f"{year}-{month:02}"
-    return await Transaction.filter(
-        user_id=user_id,
-        start_date__startswith=year_month,
-    )
+    for dado in dados_python:
+        novo_dado = {
+            "description": dado["description"] or "no description",
+            "type": "expense",
+            "date": dado["time"] or datetime.datetime.now(),
+            "amount": dado["amount"] or 0,
+            "category": dado["title"] or "no title",
+        }
+        dados_transformados.append(novo_dado)
 
-
-@app.post("/transaction")
-async def create_transaction(transaction: TransactionCreate):
-    new_transaction = await Transaction.create(**transaction.dict())
-    return new_transaction
+    return {"transactions": dados_transformados}
 
 
-@app.put("/transaction/{transaction_id}")
-async def update_transaction(transaction_id: UUID, transaction: TransactionCreate):
-    transaction_db = await Transaction.get(id=transaction_id)
-    for key, value in transaction.dict().items():
-        setattr(transaction_db, key, value)
-    await transaction_db.save()
-    return transaction_db
+@app.get("/nubank/get_transactions")
+async def get_nubank_transactions(year: int, month: int):
+    cert_path = os.path.abspath(os.path.join(
+        os.path.dirname(__file__), '..', 'cert.p12'))
 
+    # nu = Nubank(MockHttpClient())
+    nu = Nubank()
+    nu.authenticate_with_cert(
+        '', '', cert_path)
 
-@app.delete("/transaction/{transaction_id}")
-async def delete_transaction(transaction_id: UUID):
-    transaction = await Transaction.get(id=transaction_id)
-    await transaction.delete()
-    return {"message": "Transaction deleted"}
+    transactions = nu.get_card_statements()
 
+    # Filtrar os dados com base na data
+    monthly_transactions = [transaction for transaction in transactions if date_in_month_and_year(
+        transaction['time'], month, year)]
 
-@app.post("/transactions/csv")
-async def create_transactions_from_csv(file: UploadFile = File(...)):
-    try:
-        transactions = []
+    filtered_data = []
 
-        contents = await file.read()
-        decoded_content = contents.decode("utf-8")
-        reader = csv.reader(decoded_content.splitlines(), delimiter=";")
-        next(reader)
+    for dado in monthly_transactions:
+        new_data = {
+            "description": dado["description"] or "no description",
+            "type": "expense",
+            "date": dado["time"] or datetime.datetime.now(),
+            "amount": dado["amount"] or 0,
+            "category": dado["title"] or "no title",
+        }
+        filtered_data.append(new_data)
 
-        for row in reader:
-            try:
-                date_str, establishment, _, value_str, _ = row
-                value = float(value_str.replace("R$", "").replace(",", "."))
-
-                date = datetime.strptime(date_str, "%d/%m/%Y")
-                formatted_date = date.date().isoformat()
-
-                transaction = TransactionCreate(
-                    description=establishment,
-                    type=TransactionType.Expense,
-                    start_date=formatted_date,
-                    payment_method="fatura xp",
-                    tag="",
-                    value=value,
-                    user_id="string",
-                )
-
-                created_transaction = await Transaction.create(**transaction.dict())
-                transactions.append(created_transaction)
-            except Exception as e:
-                print(f"Error processing row: {row}. Error: {str(e)}")
-
-        return {"message": "Transactions created", "transactions": transactions}
-    except Exception as e:
-        print(f"Error creating transactions: {str(e)}")
-        return {"message": "Error creating transactions"}
+    return {"transactions": filtered_data}
 
 if __name__ == '__main__':
     uvicorn.run(app, host="0.0.0.0", port=8000)
